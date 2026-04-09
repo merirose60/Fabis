@@ -7,6 +7,7 @@ from typing import Dict, Any
 import aiohttp
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
+from yarl import URL
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class DLStreamsExtractor:
         self._playwright = None
         self._browser = None
         self._browser_launch_lock = asyncio.Lock()
+        self._captured_cookies: list[dict] = []
 
     def _get_browser_lock(self, channel_key: str) -> asyncio.Lock:
         lock = self._browser_channel_locks.get(channel_key)
@@ -320,6 +322,13 @@ class DLStreamsExtractor:
                         self._clear_channel_cache(channel_id)
                         self._mark_browser_failure(channel_key)
 
+                    self._captured_cookies = await context.cookies()
+                    # Sync cookies to session
+                    if self.session:
+                        yarl_url = URL(resolved_player_url)
+                        for cookie in self._captured_cookies:
+                            self.session.cookie_jar.update_cookies({cookie['name']: cookie['value']}, response_url=yarl_url)
+
                     logger.info("DLStreams browser session capture completed for %s", channel_key)
                 finally:
                     await context.close()
@@ -393,8 +402,31 @@ class DLStreamsExtractor:
                 "User-Agent": self.base_headers["User-Agent"],
                 "Accept": "*/*",
                 "X-Direct-Connection": "1",
+                "Sec-Fetch-Dest": "empty",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Site": "cross-site",
             }
+            
+            # Combine cookies from session and captured playwright cookies
             cookie_header = self._get_cookie_header_for_url(m3u8_url)
+            
+            # Also add cookies captured directly from the browser context
+            if self._captured_cookies:
+                relevant_cookies = []
+                stream_domain = urlparse(m3u8_url).netloc
+                entry_domain = urlparse(self.entry_origin).netloc
+                
+                for c in self._captured_cookies:
+                    if stream_domain in c['domain'] or entry_domain in c['domain'] or c['domain'] in stream_domain:
+                        relevant_cookies.append(f"{c['name']}={c['value']}")
+                
+                if relevant_cookies:
+                    browser_cookie_str = "; ".join(relevant_cookies)
+                    if cookie_header:
+                        cookie_header = f"{cookie_header}; {browser_cookie_str}"
+                    else:
+                        cookie_header = browser_cookie_str
+
             if cookie_header:
                 playback_headers["Cookie"] = cookie_header
 
