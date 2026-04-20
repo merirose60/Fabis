@@ -2315,7 +2315,8 @@ class HLSProxy:
                         self.url, self.headers, self.proxy = url, headers, proxy
                         self.session = None
                     async def __aenter__(self):
-                        self.session = CurlAsyncSession(impersonate="chrome120")
+                        # Force HTTP/1.1 to avoid 502 errors with fragile CDNs
+                        self.session = CurlAsyncSession(impersonate="chrome120", http_version="1.1")
                         await self.session.__aenter__()
                         c_resp = await self.session.get(self.url, headers=self.headers, proxy=self.proxy, timeout=30)
                         
