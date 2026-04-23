@@ -166,9 +166,16 @@ export PIP_BREAK_SYSTEM_PACKAGES=1
 export PORT=7860
 export DISPLAY=:99
 export ENABLE_WARP=false
-export CHROME_BIN="/usr/bin/chromium-browser"
-export CHROME_EXE_PATH=/usr/bin/chromium-browser
-export CHROME_DRIVER_PATH=/usr/bin/chromedriver
+
+# Auto-detect Chromium path
+if [ -f "/usr/bin/chromium" ]; then
+    export CHROME_BIN="/usr/bin/chromium"
+elif [ -f "/usr/bin/chromium-browser" ]; then
+    export CHROME_BIN="/usr/bin/chromium-browser"
+fi
+
+export CHROME_EXE_PATH="$CHROME_BIN"
+export CHROME_DRIVER_PATH="/usr/bin/chromedriver"
 export FLARESOLVERR_URL=http://localhost:8191
 export BYPARR_URL=http://localhost:8192
 
